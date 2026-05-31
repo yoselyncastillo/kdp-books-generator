@@ -102,7 +102,7 @@ export default function Preview({
           );
 
           return (
-            <KdpPageCanvas key={`puzzle-${puzzle.id}`} className="kdp-page">
+            <KdpPageCanvas key={`puzzle-${puzzle.id}`} id={`puzzle-${assignedPage}`} className="kdp-page">
               {bgForThisPage && bgForThisPage.imgData && (
                 <BackgroundImage
                   src={bgForThisPage.imgData}

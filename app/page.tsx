@@ -2,6 +2,7 @@
 
 import Preview from '@/components/Preview';
 import Sidebar from '@/components/Sidebar';
+import CsvEditor from '@/components/CsvEditor';
 import { LayoutWrapper } from '@/styles/components';
 import { KdpPrintStyles } from '@/styles/global';
 import { BookConfig, RawPuzzleData, Puzzle } from '@/types';
@@ -54,6 +55,59 @@ export default function KdpGeneratorApp() {
   const [showPreviewSolutions, setShowPreviewSolutions] =
     useState<boolean>(false);
 
+  const [isTestingManual, setIsTestingManual] = useState<boolean>(false);
+  const [manualData, setManualData] = useState<RawPuzzleData>({
+    title: 'Prueba Manual',
+    scripture: 'En el principio creó Dios los cielos y la tierra.',
+    words: ['PRINCIPIO', 'DIOS', 'CIELOS', 'TIERRA'],
+  });
+  const [manualDataset, setManualDataset] = useState<Puzzle[]>([]);
+
+  const [activePageIndex, setActivePageIndex] = useState<number>(0);
+  const [showFullTable, setShowFullTable] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    if (!isTestingManual) return;
+    try {
+      const { grid, solutionMask } = buildMatrix(
+        manualData.words,
+        draftConfig.gridRows,
+        draftConfig.gridCols,
+        draftConfig.allowDiagonals,
+        draftConfig.allowReverse,
+      );
+      setManualDataset([{ id: 9999, ...manualData, grid, solutionMask }]);
+    } catch (e) {
+      console.warn("No se pudo generar el puzzle manual", e);
+    }
+  }, [manualData, draftConfig, isTestingManual]);
+
+  const handleUpdateCsvRow = (index: number, updatedRow: RawPuzzleData) => {
+    const newRaw = [...rawCsvData];
+    newRaw[index] = updatedRow;
+    setRawCsvData(newRaw);
+    
+    // Regenerar el puzzle específico en el dataset
+    const newDataset = [...dataset];
+    const targetPuzzleIndex = newDataset.findIndex(p => p.id === index + 1);
+    
+    if (targetPuzzleIndex !== -1) {
+      try {
+        const { grid, solutionMask } = buildMatrix(
+          updatedRow.words,
+          appliedConfig.gridRows,
+          appliedConfig.gridCols,
+          appliedConfig.allowDiagonals,
+          appliedConfig.allowReverse,
+        );
+        newDataset[targetPuzzleIndex] = { id: index + 1, ...updatedRow, grid, solutionMask };
+        setDataset(newDataset);
+      } catch (e) {
+        console.warn("No se pudo regenerar el puzzle en caliente", e);
+      }
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -103,14 +157,33 @@ export default function KdpGeneratorApp() {
           setZoomLevel={setZoomLevel}
           showPreviewSolutions={showPreviewSolutions}
           setShowPreviewSolutions={setShowPreviewSolutions}
+          isTestingManual={isTestingManual}
+          setIsTestingManual={setIsTestingManual}
+          manualData={manualData}
+          setManualData={setManualData}
+          activePageIndex={activePageIndex}
+          setActivePageIndex={setActivePageIndex}
+          rawCsvData={rawCsvData}
+          onUpdateCsvRow={handleUpdateCsvRow}
+          setShowFullTable={setShowFullTable}
         />
-        <Preview
-          dataset={dataset}
-          appliedConfig={appliedConfig}
-          zoomLevel={zoomLevel}
-          showPreviewSolutions={showPreviewSolutions}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+          <Preview
+            dataset={isTestingManual ? manualDataset : dataset}
+            appliedConfig={isTestingManual ? draftConfig : appliedConfig}
+            zoomLevel={zoomLevel}
+            showPreviewSolutions={showPreviewSolutions}
+          />
+        </div>
       </LayoutWrapper>
+
+      {showFullTable && (
+        <CsvEditor 
+          rawCsvData={rawCsvData} 
+          onUpdateRow={handleUpdateCsvRow} 
+          onClose={() => setShowFullTable(false)} 
+        />
+      )}
     </div>
   );
 }

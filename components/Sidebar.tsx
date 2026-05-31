@@ -26,6 +26,15 @@ interface SidebarProps {
   setZoomLevel: (z: number) => void;
   showPreviewSolutions: boolean;
   setShowPreviewSolutions: (s: boolean) => void;
+  isTestingManual: boolean;
+  setIsTestingManual: (m: boolean) => void;
+  manualData: import('../types').RawPuzzleData;
+  setManualData: React.Dispatch<React.SetStateAction<import('../types').RawPuzzleData>>;
+  activePageIndex: number;
+  setActivePageIndex: (i: number) => void;
+  rawCsvData: import('../types').RawPuzzleData[];
+  onUpdateCsvRow: (index: number, updatedRow: import('../types').RawPuzzleData) => void;
+  setShowFullTable: (show: boolean) => void;
 }
 
 export default function Sidebar({
@@ -38,7 +47,51 @@ export default function Sidebar({
   setZoomLevel,
   showPreviewSolutions,
   setShowPreviewSolutions,
+  isTestingManual,
+  setIsTestingManual,
+  manualData,
+  setManualData,
+  activePageIndex,
+  setActivePageIndex,
+  rawCsvData,
+  onUpdateCsvRow,
+  setShowFullTable,
 }: SidebarProps) {
+  // Local state to track edits before blur for inline editor
+  const [localInlineData, setLocalInlineData] = React.useState<import('../types').RawPuzzleData | null>(null);
+
+  React.useEffect(() => {
+    if (rawCsvData && rawCsvData.length > 0 && activePageIndex < rawCsvData.length) {
+      setLocalInlineData(rawCsvData[activePageIndex]);
+    } else {
+      setLocalInlineData(null);
+    }
+  }, [rawCsvData, activePageIndex]);
+
+  const handleInlineChange = (field: keyof import('../types').RawPuzzleData, value: string) => {
+    if (!localInlineData) return;
+    if (field === 'words') {
+      setLocalInlineData({ ...localInlineData, words: value.split(',').map(w => w.trim()) });
+    } else {
+      setLocalInlineData({ ...localInlineData, [field]: value });
+    }
+  };
+
+  const handleInlineBlur = () => {
+    if (localInlineData) {
+      onUpdateCsvRow(activePageIndex, localInlineData);
+    }
+  };
+
+  const handlePageChange = (step: number) => {
+    const newIdx = Math.max(0, Math.min(rawCsvData.length - 1, activePageIndex + step));
+    setActivePageIndex(newIdx);
+    // Scroll into view
+    const el = document.getElementById(`puzzle-${newIdx + draftConfig.startingPage}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
   const addBackgroundRow = () => {
     const newBg: BackgroundLayer = {
       id: Date.now().toString(),
@@ -80,17 +133,127 @@ export default function Sidebar({
       <PanelGrid>
         {/* COLUMNA IZQUIERDA: Datos y Estructura */}
         <div>
+          <SectionTitle>Modo Prueba</SectionTitle>
+          <FieldGroup>
+            <CheckboxLabel>
+              <input
+                type="checkbox"
+                checked={isTestingManual}
+                onChange={(e) => setIsTestingManual(e.target.checked)}
+              />{' '}
+              <strong>Modo Prueba Manual</strong>
+            </CheckboxLabel>
+          </FieldGroup>
+
+          {isTestingManual && (
+            <div style={{ backgroundColor: '#fff3cd', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #ffeeba' }}>
+              <FieldGroup>
+                <FieldLabel>Título / Cita Bíblica</FieldLabel>
+                <StyledInput
+                  type="text"
+                  value={manualData.title}
+                  onChange={(e) => setManualData({ ...manualData, title: e.target.value })}
+                />
+              </FieldGroup>
+              <FieldGroup>
+                <FieldLabel>Versículo</FieldLabel>
+                <textarea
+                  style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ced6e0', fontFamily: 'inherit', minHeight: '80px', resize: 'vertical' }}
+                  value={manualData.scripture}
+                  onChange={(e) => setManualData({ ...manualData, scripture: e.target.value })}
+                />
+              </FieldGroup>
+              <FieldGroup>
+                <FieldLabel>Palabras Clave (separadas por comas)</FieldLabel>
+                <StyledInput
+                  type="text"
+                  value={manualData.words.join(', ')}
+                  onChange={(e) => setManualData({ ...manualData, words: e.target.value.split(',').map(w => w.trim()) })}
+                />
+              </FieldGroup>
+              <ActionButton onClick={() => setIsTestingManual(false)} style={{ backgroundColor: '#2f3542' }}>
+                Salir de Modo Prueba
+              </ActionButton>
+            </div>
+          )}
           <SectionTitle>1. Datos y Estructura</SectionTitle>
 
-          <FieldGroup>
-            <FieldLabel>Cargar archivo (.csv)</FieldLabel>
-            <StyledInput type="file" accept=".csv" onChange={onFileUpload} />
-            <div
-              style={{ fontSize: '0.8rem', marginTop: '4px', color: '#888' }}
-            >
-              Datos cargados: {rawCsvDataLength} versículos
+          {!isTestingManual && (
+            <FieldGroup>
+              <FieldLabel>Cargar archivo (.csv)</FieldLabel>
+              <StyledInput type="file" accept=".csv" onChange={onFileUpload} />
+              <div style={{ fontSize: '0.8rem', marginTop: '4px', color: '#888' }}>
+                Datos cargados: {rawCsvDataLength} versículos
+              </div>
+            </FieldGroup>
+          )}
+
+          {!isTestingManual && rawCsvData.length > 0 && (
+            <div style={{ backgroundColor: '#f5f6fa', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #ced6e0' }}>
+              <SectionTitle style={{ fontSize: '0.95rem', marginBottom: '10px', color: '#2f3542', borderBottom: 'none' }}>
+                Editar Página {activePageIndex + draftConfig.startingPage} (ID: {activePageIndex + 1})
+              </SectionTitle>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <ActionButton 
+                  style={{ width: '40%', padding: '6px', fontSize: '0.85rem' }} 
+                  onClick={() => handlePageChange(-1)} 
+                  disabled={activePageIndex === 0}
+                >
+                  ◀ Anterior
+                </ActionButton>
+                <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
+                  {activePageIndex + 1} / {rawCsvData.length}
+                </span>
+                <ActionButton 
+                  style={{ width: '40%', padding: '6px', fontSize: '0.85rem' }} 
+                  onClick={() => handlePageChange(1)} 
+                  disabled={activePageIndex === rawCsvData.length - 1}
+                >
+                  Siguiente ▶
+                </ActionButton>
+              </div>
+
+              {localInlineData && (
+                <>
+                  <FieldGroup>
+                    <FieldLabel>Título / Cita Bíblica</FieldLabel>
+                    <StyledInput
+                      type="text"
+                      value={localInlineData.title}
+                      onChange={(e) => handleInlineChange('title', e.target.value)}
+                      onBlur={handleInlineBlur}
+                    />
+                  </FieldGroup>
+                  <FieldGroup>
+                    <FieldLabel>Versículo</FieldLabel>
+                    <textarea
+                      style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ced6e0', fontFamily: 'inherit', minHeight: '60px', resize: 'vertical' }}
+                      value={localInlineData.scripture}
+                      onChange={(e) => handleInlineChange('scripture', e.target.value)}
+                      onBlur={handleInlineBlur}
+                    />
+                  </FieldGroup>
+                  <FieldGroup>
+                    <FieldLabel>Palabras Clave (por comas)</FieldLabel>
+                    <StyledInput
+                      type="text"
+                      value={localInlineData.words.join(', ')}
+                      onChange={(e) => handleInlineChange('words', e.target.value)}
+                      onBlur={handleInlineBlur}
+                    />
+                  </FieldGroup>
+                </>
+              )}
+              
+              <ActionButton 
+                onClick={() => setShowFullTable(true)} 
+                style={{ backgroundColor: '#ffffff', color: '#2f3542', border: '1px dashed #ced6e0', marginTop: '10px' }}
+              >
+                ⊞ Ver Tabla Completa del Libro
+              </ActionButton>
             </div>
-          </FieldGroup>
+          )}
 
           <FieldRow>
             <div style={{ flex: 1 }}>
