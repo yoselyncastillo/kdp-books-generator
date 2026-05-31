@@ -1,65 +1,116 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import Preview from '@/components/Preview';
+import Sidebar from '@/components/Sidebar';
+import { LayoutWrapper } from '@/styles/components';
+import { KdpPrintStyles } from '@/styles/global';
+import { BookConfig, RawPuzzleData, Puzzle } from '@/types';
+import { parseCsvFile } from '@/utils/csvHelper';
+import { buildMatrix } from '@/utils/wordSearch';
+import React, { useState } from 'react';
+import { Lora, Playfair_Display, Merriweather } from 'next/font/google';
+
+const fontLora = Lora({
+  subsets: ['latin'],
+  weight: ['400', '700'],
+  style: ['normal', 'italic'],
+});
+const fontPlayfair = Playfair_Display({
+  subsets: ['latin'],
+  weight: ['400', '800'],
+  style: ['normal', 'italic'],
+});
+const fontMerriweather = Merriweather({
+  subsets: ['latin'],
+  weight: ['300', '900'],
+  style: ['normal', 'italic'],
+});
+
+const DEFAULT_CONFIG: BookConfig = {
+  maxPages: 100,
+  startingPage: 3,
+  solutionsDensity: 4,
+  gridRows: 12,
+  gridCols: 18,
+  cellFontSize: 16,
+  wordColumns: 4,
+  allowDiagonals: true,
+  allowReverse: false,
+  backgrounds: [],
+  bgOpacity: 15,
+  showInternalLines: false,
+  showExternalBorder: false,
+  layoutVersion: 1,
+};
+
+export default function KdpGeneratorApp() {
+  const [rawCsvData, setRawCsvData] = useState<RawPuzzleData[]>([]);
+  const [dataset, setDataset] = useState<Puzzle[]>([]);
+  const [draftConfig, setDraftConfig] = useState<BookConfig>(DEFAULT_CONFIG);
+  const [appliedConfig, setAppliedConfig] =
+    useState<BookConfig>(DEFAULT_CONFIG);
+
+  const [zoomLevel, setZoomLevel] = useState<number>(0.8);
+  const [showPreviewSolutions, setShowPreviewSolutions] =
+    useState<boolean>(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const parsed = await parseCsvFile(file);
+        setRawCsvData(parsed);
+      } catch (error) {
+        alert('Error procesando CSV.');
+      }
+    }
+  };
+
+  const handleGenerateBook = () => {
+    if (rawCsvData.length === 0) {
+      alert('Primero sube un archivo CSV válido.');
+      return;
+    }
+
+    const generatedPuzzles: Puzzle[] = rawCsvData.map((item, idx) => {
+      const { grid, solutionMask } = buildMatrix(
+        item.words,
+        draftConfig.gridRows,
+        draftConfig.gridCols,
+        draftConfig.allowDiagonals,
+        draftConfig.allowReverse,
+      );
+      return { id: idx + 1, ...item, grid, solutionMask };
+    });
+
+    setAppliedConfig(draftConfig);
+    setDataset(generatedPuzzles);
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div
+      className={`${fontLora.className} ${fontPlayfair.className} ${fontMerriweather.className}`}
+    >
+      <LayoutWrapper>
+        <KdpPrintStyles />
+        <Sidebar
+          draftConfig={draftConfig}
+          setDraftConfig={setDraftConfig}
+          rawCsvDataLength={rawCsvData.length}
+          onFileUpload={handleFileUpload}
+          onGenerate={handleGenerateBook}
+          zoomLevel={zoomLevel}
+          setZoomLevel={setZoomLevel}
+          showPreviewSolutions={showPreviewSolutions}
+          setShowPreviewSolutions={setShowPreviewSolutions}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+        <Preview
+          dataset={dataset}
+          appliedConfig={appliedConfig}
+          zoomLevel={zoomLevel}
+          showPreviewSolutions={showPreviewSolutions}
+        />
+      </LayoutWrapper>
     </div>
   );
 }
