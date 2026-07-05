@@ -184,8 +184,9 @@ export default function CsvEditor({ rawCsvData, onUpdateRow, onClose }: CsvEdito
               <tr>
                 <th style={{ width: '50px' }}>ID</th>
                 <th style={{ width: '20%' }}>Título / Cita</th>
-                <th style={{ width: '40%' }}>Versículo</th>
-                <th style={{ width: '30%' }}>Palabras Clave (Separadas por comas)</th>
+                <th style={{ width: '30%' }}>Versículo</th>
+                <th style={{ width: '20%' }}>Palabras Clave (Separadas por comas)</th>
+                <th style={{ width: '30%' }}>Texto de Reflexión (Solo V4)</th>
               </tr>
             </thead>
             <tbody>
@@ -225,6 +226,20 @@ export default function CsvEditor({ rawCsvData, onUpdateRow, onClose }: CsvEdito
                         onChange={(e) => handleInputChange(idx, 'words', e.target.value)}
                         onBlur={() => handleBlur(idx)}
                       />
+                    </td>
+                    <td>
+                      <EditorTextarea
+                        value={row.reflectionText || ''}
+                        onChange={(e) => handleInputChange(idx, 'reflectionText', e.target.value)}
+                        onBlur={() => handleBlur(idx)}
+                        placeholder="Opcional. Usado en Layout V4."
+                        $error={!row.reflectionText || row.reflectionText.trim() === ''}
+                      />
+                      {(!row.reflectionText || row.reflectionText.trim() === '') && (
+                        <ErrorText style={{ color: '#e1b12c' }}>
+                          Vacío (No se mostrará reflexión en V4)
+                        </ErrorText>
+                      )}
                     </td>
                   </tr>
                 );

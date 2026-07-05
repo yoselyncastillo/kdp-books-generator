@@ -1,3 +1,5 @@
+import { PlacedWord } from '../types';
+
 export const normalizeWord = (word: string) => {
   return word.toUpperCase()
     .replace(/[ÁÀÄÂ]/g, 'A')
@@ -18,10 +20,11 @@ export function verifyPlacement(word: string, r: number, c: number, dir: number[
   return true;
 }
 
-export function buildMatrix(wordList: string[], rows: number, cols: number, allowDiagonals: boolean, allowReverse: boolean): { grid: string[][]; solutionMask: boolean[][] } {
+export function buildMatrix(wordList: string[], rows: number, cols: number, allowDiagonals: boolean, allowReverse: boolean): { grid: string[][]; solutionMask: boolean[][]; placedWords: PlacedWord[] } {
   // Construimos matrices asimétricas
   const grid: string[][] = Array(rows).fill(null).map(() => Array(cols).fill(''));
   const solutionMask: boolean[][] = Array(rows).fill(null).map(() => Array(cols).fill(false));
+  const placedWords: PlacedWord[] = [];
   
   const orientations: number[][] = [[0, 1], [1, 0]]; 
   if (allowReverse) orientations.push([0, -1], [-1, 0]); 
@@ -44,12 +47,26 @@ export function buildMatrix(wordList: string[], rows: number, cols: number, allo
       const startCol = Math.floor(Math.random() * cols);
 
       if (verifyPlacement(word, startRow, startCol, currentDir, grid, rows, cols)) {
+        let endRow = startRow;
+        let endCol = startCol;
         for (let i = 0; i < word.length; i++) {
           const targetRow = startRow + currentDir[0] * i;
           const targetCol = startCol + currentDir[1] * i;
           grid[targetRow][targetCol] = word[i];
           solutionMask[targetRow][targetCol] = true;
+          if (i === word.length - 1) {
+            endRow = targetRow;
+            endCol = targetCol;
+          }
         }
+        placedWords.push({
+          word,
+          startRow,
+          startCol,
+          endRow,
+          endCol,
+          direction: currentDir,
+        });
         inserted = true;
       }
       retries++;
@@ -64,7 +81,7 @@ export function buildMatrix(wordList: string[], rows: number, cols: number, allo
       }
     }
   }
-  return { grid, solutionMask };
+  return { grid, solutionMask, placedWords };
 }
 
 export const segmentArray = <T,>(array: T[], total: number): T[][] => {
