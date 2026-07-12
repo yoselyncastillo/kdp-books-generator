@@ -147,7 +147,7 @@ export const DeleteButton = styled.button`
 `;
 
 // --- KDP PAGES ---
-export const KdpPageCanvas = styled.div<{ $pageType?: 'left' | 'right' }>`
+export const KdpPageCanvas = styled.div<{ $pageType?: 'left' | 'right'; $margins?: { top: number; bottom: number; inner: number; outer: number } }>`
   width: 8.5in;
   height: 11in;
   min-width: 8.5in;
@@ -159,12 +159,15 @@ export const KdpPageCanvas = styled.div<{ $pageType?: 'left' | 'right' }>`
   box-sizing: border-box;
   
 
-  /* Márgenes dinámicos según el tipo de página. 
-     Página Par (Izquierda) -> lomo a la derecha (0.8in).
-     Página Impar (Derecha) -> lomo a la izquierda (0.8in). */
-  padding: ${({ $pageType }) => {
-    if ($pageType === 'left') return '0.3in 0.8in 0.3in 0.5in';
-    return '0.3in 0.5in 0.3in 0.8in'; // right or default
+  /* Márgenes dinámicos según el tipo de página. */
+  padding: ${({ $pageType, $margins }) => {
+    const top = $margins?.top ?? 0.3;
+    const bottom = $margins?.bottom ?? 0.3;
+    const inner = $margins?.inner ?? 0.8;
+    const outer = $margins?.outer ?? 0.5;
+    
+    if ($pageType === 'left') return `${top}in ${inner}in ${bottom}in ${outer}in`;
+    return `${top}in ${outer}in ${bottom}in ${inner}in`; // right or default
   }};
 
   /* Mantenemos tu distribución vertical original */
@@ -176,7 +179,7 @@ export const KdpPageCanvas = styled.div<{ $pageType?: 'left' | 'right' }>`
   overflow: hidden;
   background-color: ${COLORS.print.white};
 
-/* 👇 AQUÍ ESTÁ EL TRUCO: Mapear los offsets del absolute con tus paddings */
+  /* 👇 AQUÍ ESTÁ EL TRUCO: Mapear los offsets del absolute con tus paddings */
   &::before {
     content: '';
     position: absolute;
@@ -185,22 +188,24 @@ export const KdpPageCanvas = styled.div<{ $pageType?: 'left' | 'right' }>`
     border: 1.5px dashed transparent; /* Punteado para que parezca una guía de diseño */
     opacity: 0.6;
 
-    top: 0.3in;
-    bottom: 0.3in;
+    top: ${({ $margins }) => $margins?.top ?? 0.3}in;
+    bottom: ${({ $margins }) => $margins?.bottom ?? 0.3}in;
 
-    ${({ $pageType }) => {
-    if ($pageType === 'left') {
+    ${({ $pageType, $margins }) => {
+      const inner = $margins?.inner ?? 0.8;
+      const outer = $margins?.outer ?? 0.5;
+      if ($pageType === 'left') {
+        return `
+            right: ${inner}in;
+            left: ${outer}in;
+          `;
+      }
+      // right or default
       return `
-          right: 0.8in;
-          left: 0.5in;
+          right: ${outer}in;
+          left: ${inner}in;
         `;
-    }
-    // right or default
-    return `
-        right: 0.5in;
-        left: 0.8in;
-      `;
-  }}
+    }}
   }
 
   @media print {
@@ -385,7 +390,7 @@ export const PuzzleCardContainer = styled.div`
   gap: 8px;
   margin: 0 auto;
   width: 100%;
-  z-index: 1;
+  position: relative;
 `;
 
 export const KdpContentCard = styled.div`
@@ -400,7 +405,6 @@ export const KdpContentCard = styled.div`
   /* height: 100%; */
   box-sizing: border-box;
   position: relative;
-  z-index: 5;
 
   @media print {
     /* box-shadow: none !important; */

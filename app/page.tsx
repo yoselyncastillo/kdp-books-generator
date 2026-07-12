@@ -29,6 +29,13 @@ const DEFAULT_CONFIG: BookConfig = {
   allowReverse: false,
   backgrounds: [],
   bgOpacity: 50,
+  pageMargins: { top: 0.3, bottom: 0.3, inner: 0.8, outer: 0.5 },
+  layerZIndices: {
+    title: 1,
+    verse: 1,
+    grid: 1,
+    words: 1,
+  },
   ...(DEFAULT_LAYOUT_CONFIGS[1] as any),
 };
 
@@ -36,8 +43,6 @@ export default function KdpGeneratorApp() {
   const [rawCsvData, setRawCsvData] = useState<RawPuzzleData[]>([]);
   const [dataset, setDataset] = useState<Puzzle[]>([]);
   const [draftConfig, setDraftConfig] = useState<BookConfig>(DEFAULT_CONFIG);
-  const [appliedConfig, setAppliedConfig] =
-    useState<BookConfig>(DEFAULT_CONFIG);
 
   const [zoomLevel, setZoomLevel] = useState<number>(0.8);
   const [showPreviewSolutions, setShowPreviewSolutions] =
@@ -52,7 +57,12 @@ export default function KdpGeneratorApp() {
     footerPrayer: 'Lord, thank You for being my faithful shepherd who provides for all my needs. Teach me to pause amidst the busyness of life, trusting in Your care and embracing the rest You offer beside quiet waters. Please restore my soul today and guide my steps in Your perfect peace. Amen.',
     floatingElements: [],
   });
-  const [manualDataset, setManualDataset] = useState<Puzzle[]>([]);
+  const [manualMatrix, setManualMatrix] = useState<{grid: any, solutionMask: any, placedWords: any} | null>(null);
+
+  const manualDataset = React.useMemo<Puzzle[]>(() => {
+    if (!manualMatrix) return [];
+    return [{ id: 9999, ...manualData, ...manualMatrix }];
+  }, [manualData, manualMatrix]);
 
   const [activePageIndex, setActivePageIndex] = useState<number>(0);
   const [showFullTable, setShowFullTable] = useState<boolean>(false);
@@ -67,11 +77,69 @@ export default function KdpGeneratorApp() {
         draftConfig.allowDiagonals,
         draftConfig.allowReverse,
       );
-      setManualDataset([{ id: 9999, ...manualData, grid, solutionMask, placedWords }]);
+      setManualMatrix({ grid, solutionMask, placedWords });
     } catch (e) {
       console.warn("No se pudo generar el puzzle manual", e);
     }
-  }, [manualData, draftConfig, isTestingManual]);
+  }, [
+    manualData.words,
+    draftConfig.gridRows,
+    draftConfig.gridCols,
+    draftConfig.allowDiagonals,
+    draftConfig.allowReverse,
+    isTestingManual
+  ]);
+
+  // Auto-regenerate global dataset when structural config changes
+  const prevStructuralConfig = React.useRef({
+    rows: draftConfig.gridRows,
+    cols: draftConfig.gridCols,
+    diagonals: draftConfig.allowDiagonals,
+    reverse: draftConfig.allowReverse,
+  });
+
+  React.useEffect(() => {
+    if (
+      prevStructuralConfig.current.rows === draftConfig.gridRows &&
+      prevStructuralConfig.current.cols === draftConfig.gridCols &&
+      prevStructuralConfig.current.diagonals === draftConfig.allowDiagonals &&
+      prevStructuralConfig.current.reverse === draftConfig.allowReverse
+    ) {
+      return;
+    }
+
+    prevStructuralConfig.current = {
+      rows: draftConfig.gridRows,
+      cols: draftConfig.gridCols,
+      diagonals: draftConfig.allowDiagonals,
+      reverse: draftConfig.allowReverse,
+    };
+
+    if (isTestingManual || rawCsvData.length === 0) return;
+
+    const timer = setTimeout(() => {
+      const generatedPuzzles: Puzzle[] = rawCsvData.map((item, idx) => {
+        const { grid, solutionMask, placedWords } = buildMatrix(
+          item.words,
+          draftConfig.gridRows,
+          draftConfig.gridCols,
+          draftConfig.allowDiagonals,
+          draftConfig.allowReverse,
+        );
+        return { id: idx + 1, ...item, grid, solutionMask, placedWords };
+      });
+      setDataset(generatedPuzzles);
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [
+    draftConfig.gridRows,
+    draftConfig.gridCols,
+    draftConfig.allowDiagonals,
+    draftConfig.allowReverse,
+    isTestingManual,
+    rawCsvData
+  ]);
 
   const handleUpdateCsvRow = (index: number, updatedRow: RawPuzzleData) => {
     const newRaw = [...rawCsvData];
@@ -86,10 +154,10 @@ export default function KdpGeneratorApp() {
       try {
         const { grid, solutionMask, placedWords } = buildMatrix(
           updatedRow.words,
-          appliedConfig.gridRows,
-          appliedConfig.gridCols,
-          appliedConfig.allowDiagonals,
-          appliedConfig.allowReverse,
+          draftConfig.gridRows,
+          draftConfig.gridCols,
+          draftConfig.allowDiagonals,
+          draftConfig.allowReverse,
         );
         newDataset[targetPuzzleIndex] = { id: index + 1, ...updatedRow, grid, solutionMask, placedWords };
         setDataset(newDataset);
@@ -107,7 +175,18 @@ export default function KdpGeneratorApp() {
         if (parsed.length === 0) {
           alert('El archivo se subió, pero no se encontraron datos válidos. Revisa que las columnas estén separadas por punto y coma (;) y que haya al menos 3 columnas por fila (Title;Scripture;Words).');
         } else {
-          alert(`¡Archivo cargado con éxito! Se detectaron ${parsed.length} juegos. No olvides hacer clic en "Generar" para ver los cambios en la previsualización.`);
+          const generatedPuzzles: Puzzle[] = parsed.map((item, idx) => {
+            const { grid, solutionMask, placedWords } = buildMatrix(
+              item.words,
+              draftConfig.gridRows,
+              draftConfig.gridCols,
+              draftConfig.allowDiagonals,
+              draftConfig.allowReverse,
+            );
+            return { id: idx + 1, ...item, grid, solutionMask, placedWords };
+          });
+          setDataset(generatedPuzzles);
+          alert(`¡Archivo cargado con éxito! Se detectaron ${parsed.length} juegos y han sido generados.`);
         }
         setRawCsvData(parsed);
       } catch (error) {
@@ -116,12 +195,11 @@ export default function KdpGeneratorApp() {
     }
   };
 
-  const handleGenerateBook = () => {
+  const regenerateAllPuzzles = () => {
     if (rawCsvData.length === 0) {
-      alert('Primero sube un archivo CSV válido.');
+      alert('No hay datos para regenerar.');
       return;
     }
-
     const generatedPuzzles: Puzzle[] = rawCsvData.map((item, idx) => {
       const { grid, solutionMask, placedWords } = buildMatrix(
         item.words,
@@ -132,15 +210,30 @@ export default function KdpGeneratorApp() {
       );
       return { id: idx + 1, ...item, grid, solutionMask, placedWords };
     });
-
-    setAppliedConfig(draftConfig);
     setDataset(generatedPuzzles);
+  };
+
+  const regeneratePuzzle = (index: number) => {
+    if (index < 0 || index >= rawCsvData.length) return;
+    const item = rawCsvData[index];
+    const { grid, solutionMask, placedWords } = buildMatrix(
+      item.words,
+      draftConfig.gridRows,
+      draftConfig.gridCols,
+      draftConfig.allowDiagonals,
+      draftConfig.allowReverse,
+    );
+    const newDataset = [...dataset];
+    const targetPuzzleIndex = newDataset.findIndex(p => p.id === index + 1);
+    if (targetPuzzleIndex !== -1) {
+      newDataset[targetPuzzleIndex] = { id: index + 1, ...item, grid, solutionMask, placedWords };
+      setDataset(newDataset);
+    }
   };
 
   const handleUpdatePuzzleFloatingElements = (puzzleId: number, newElements: import('../types').CanvasElement[]) => {
     if (isTestingManual) {
       setManualData(prev => ({ ...prev, floatingElements: newElements }));
-      setManualDataset(prev => prev.map(p => p.id === puzzleId ? { ...p, floatingElements: newElements } : p));
     } else {
       setRawCsvData(prev => prev.map((row, idx) => (idx + 1 === puzzleId) ? { ...row, floatingElements: newElements } : row));
       setDataset(prev => prev.map(p => p.id === puzzleId ? { ...p, floatingElements: newElements } : p));
@@ -158,7 +251,8 @@ export default function KdpGeneratorApp() {
           setDraftConfig={setDraftConfig}
           rawCsvDataLength={rawCsvData.length}
           onFileUpload={handleFileUpload}
-          onGenerate={handleGenerateBook}
+          onRegenerateAll={regenerateAllPuzzles}
+          onRegeneratePuzzle={regeneratePuzzle}
           zoomLevel={zoomLevel}
           setZoomLevel={setZoomLevel}
           showPreviewSolutions={showPreviewSolutions}
@@ -176,13 +270,40 @@ export default function KdpGeneratorApp() {
         <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
           <Preview
             dataset={isTestingManual ? manualDataset : dataset}
-            appliedConfig={isTestingManual ? draftConfig : appliedConfig}
+            appliedConfig={draftConfig}
             zoomLevel={zoomLevel}
             showPreviewSolutions={showPreviewSolutions}
             onUpdateFloatingElements={handleUpdatePuzzleFloatingElements}
           />
         </div>
       </LayoutWrapper>
+      {/* Botón flotante para imprimir */}
+      <button
+        onClick={() => window.print()}
+        style={{
+          position: 'fixed',
+          bottom: '20px',
+          right: '20px',
+          width: '60px',
+          height: '60px',
+          borderRadius: '50%',
+          backgroundColor: '#000',
+          color: 'white',
+          border: 'none',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          cursor: 'pointer',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '24px'
+        }}
+        title="Imprimir a PDF"
+        className="no-print"
+      >
+        🖨️
+      </button>
+
 
       {showFullTable && (
         <CsvEditor

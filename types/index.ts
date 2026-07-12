@@ -41,6 +41,7 @@ export interface CanvasElement {
   height: number | string;
   zIndex: number;
   pageSide: 'left' | 'right';
+  isLocked?: boolean;
 }
 
 export interface TypographySettings {
@@ -70,6 +71,20 @@ export interface NotesSettings {
   spacing: number;
 }
 
+export interface PageMargins {
+  top: number;
+  bottom: number;
+  inner: number;
+  outer: number;
+}
+
+export interface LayerZIndices {
+  title: number;
+  verse: number;
+  grid: number;
+  words: number;
+}
+
 export interface BookConfig {
   maxPages: number;
   startingPage: number;
@@ -82,6 +97,8 @@ export interface BookConfig {
   backgrounds: BackgroundLayer[];
   bgOpacity: number;
   layoutVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  pageMargins: PageMargins;
+  layerZIndices: LayerZIndices;
   
   // Nuevas configuraciones avanzadas
   hideRightTitle: boolean;

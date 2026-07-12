@@ -23,7 +23,8 @@ interface SidebarProps {
   setDraftConfig: React.Dispatch<React.SetStateAction<BookConfig>>;
   rawCsvDataLength: number;
   onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onGenerate: () => void;
+  onRegenerateAll: () => void;
+  onRegeneratePuzzle: (index: number) => void;
   zoomLevel: number;
   setZoomLevel: (z: number) => void;
   showPreviewSolutions: boolean;
@@ -44,7 +45,8 @@ export default function Sidebar({
   setDraftConfig,
   rawCsvDataLength,
   onFileUpload,
-  onGenerate,
+  onRegenerateAll,
+  onRegeneratePuzzle,
   zoomLevel,
   setZoomLevel,
   showPreviewSolutions,
@@ -173,22 +175,82 @@ export default function Sidebar({
     updateFloatingElements([...floatingElements, newEl]);
   };
 
+  const layerZIndices = draftConfig.layerZIndices || { title: 1, verse: 1, grid: 1, words: 1 };
+  
+  const structuralLayers = [
+    { id: 'title', type: 'structural', name: '🔤 Título (Fijo)', zIndex: layerZIndices.title, isStructural: true, isLocked: true },
+    { id: 'verse', type: 'structural', name: '📖 Versículo (Fijo)', zIndex: layerZIndices.verse, isStructural: true, isLocked: true },
+    { id: 'grid', type: 'structural', name: '🧩 Sopa de Letras (Fijo)', zIndex: layerZIndices.grid, isStructural: true, isLocked: true },
+    { id: 'words', type: 'structural', name: '📝 Lista de Palabras (Fijo)', zIndex: layerZIndices.words, isStructural: true, isLocked: true },
+  ];
+
+  const floatingLayers = floatingElements.map((el, i) => ({
+    id: el.id,
+    type: el.type,
+    name: el.type === 'image' ? `📷 Imagen ${i + 1}` : `📝 Texto Libre ${i + 1}`,
+    zIndex: el.zIndex,
+    isLocked: el.isLocked,
+    isStructural: false
+  }));
+
+  const allLayers = [...structuralLayers, ...floatingLayers].sort((a, b) => b.zIndex - a.zIndex);
+
+  const applyOrder = (orderedLayers: typeof allLayers) => {
+    let newLayerZIndices = { ...layerZIndices };
+    let newFloatingElements = [...floatingElements];
+
+    orderedLayers.forEach((layer, index) => {
+      // highest index on top. orderedLayers is sorted highest to lowest, so first item gets highest zIndex
+      const newZ = orderedLayers.length - index;
+      if (layer.isStructural) {
+        newLayerZIndices[layer.id as keyof typeof newLayerZIndices] = newZ;
+      } else {
+        const fIndex = newFloatingElements.findIndex(el => el.id === layer.id);
+        if (fIndex > -1) {
+          newFloatingElements[fIndex] = { ...newFloatingElements[fIndex], zIndex: newZ };
+        }
+      }
+    });
+
+    setDraftConfig({
+      ...draftConfig,
+      layerZIndices: newLayerZIndices
+    });
+    updateFloatingElements(newFloatingElements);
+  };
+
   const bringToFront = (id: string) => {
-    const maxZ = Math.max(...floatingElements.map(el => el.zIndex), 0);
-    updateFloatingElements(
-      floatingElements.map(el => el.id === id ? { ...el, zIndex: maxZ + 1 } : el)
-    );
+    const index = allLayers.findIndex(l => l.id === id);
+    if (index <= 0) return; // already at top
+
+    const newOrder = [...allLayers];
+    const temp = newOrder[index];
+    newOrder[index] = newOrder[index - 1];
+    newOrder[index - 1] = temp;
+
+    applyOrder(newOrder);
   };
 
   const sendToBack = (id: string) => {
-    const minZ = Math.min(...floatingElements.map(el => el.zIndex), 0);
-    updateFloatingElements(
-      floatingElements.map(el => el.id === id ? { ...el, zIndex: minZ - 1 } : el)
-    );
+    const index = allLayers.findIndex(l => l.id === id);
+    if (index === -1 || index === allLayers.length - 1) return; // already at bottom
+
+    const newOrder = [...allLayers];
+    const temp = newOrder[index];
+    newOrder[index] = newOrder[index + 1];
+    newOrder[index + 1] = temp;
+
+    applyOrder(newOrder);
   };
 
   const removeFloatingElement = (id: string) => {
     updateFloatingElements(floatingElements.filter(el => el.id !== id));
+  };
+
+  const toggleLockElement = (id: string) => {
+    updateFloatingElements(
+      floatingElements.map(el => el.id === id ? { ...el, isLocked: !el.isLocked } : el)
+    );
   };
 
   const renderTypographyControls = (configKey: 'titleTypography' | 'verseTypography' | 'cluesTypography' | 'reflectionTypography' | 'footerPrayerTypography' | 'gridTypography') => (
@@ -357,11 +419,23 @@ export default function Sidebar({
               </>
             )}
             
+            <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+              <ActionButton onClick={() => onRegeneratePuzzle(activePageIndex)} style={{ flex: 1, backgroundColor: '#e1b12c', color: '#000' }}>
+                🔄 Regenerar esta sopa
+              </ActionButton>
+            </div>
+            
             <ActionButton onClick={() => setShowFullTable(true)} style={{ backgroundColor: '#ffffff', color: '#2f3542', border: '1px dashed #ced6e0', marginTop: '10px' }}>
               ⊞ Ver Tabla Completa
             </ActionButton>
             <ActionButton onClick={() => exportCsvFile(rawCsvData)} style={{ backgroundColor: '#009432', marginTop: '10px' }} $primary>
               ↓ Exportar CSV Modificado
+            </ActionButton>
+            
+            <hr style={{ borderTop: '1px solid #eee', margin: '20px 0' }} />
+            
+            <ActionButton onClick={onRegenerateAll} style={{ backgroundColor: '#c23616', color: '#fff', width: '100%' }}>
+              🔄 Regenerar todos los puzzles
             </ActionButton>
           </div>
         )}
@@ -426,6 +500,29 @@ export default function Sidebar({
             </DeleteButton>
           )}
         </FieldGroup>
+
+        <hr style={{ borderTop: '1px solid #eee', margin: '15px 0' }} />
+        <SectionTitle style={{ fontSize: '1rem', border: 'none' }}>Márgenes de Página (Pulgadas)</SectionTitle>
+        <FieldRow>
+          <div style={{ flex: 1 }}>
+            <FieldLabel>Sup (Top)</FieldLabel>
+            <StyledInput type="number" step="0.05" value={draftConfig.pageMargins?.top ?? 0.3} onChange={(e) => setDraftConfig({ ...draftConfig, pageMargins: { ...(draftConfig.pageMargins || {top: 0.3, bottom: 0.3, inner: 0.8, outer: 0.5}), top: parseFloat(e.target.value) || 0 } })} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <FieldLabel>Inf (Bottom)</FieldLabel>
+            <StyledInput type="number" step="0.05" value={draftConfig.pageMargins?.bottom ?? 0.3} onChange={(e) => setDraftConfig({ ...draftConfig, pageMargins: { ...(draftConfig.pageMargins || {top: 0.3, bottom: 0.3, inner: 0.8, outer: 0.5}), bottom: parseFloat(e.target.value) || 0 } })} />
+          </div>
+        </FieldRow>
+        <FieldRow>
+          <div style={{ flex: 1 }}>
+            <FieldLabel>Lomo (Inner)</FieldLabel>
+            <StyledInput type="number" step="0.05" value={draftConfig.pageMargins?.inner ?? 0.8} onChange={(e) => setDraftConfig({ ...draftConfig, pageMargins: { ...(draftConfig.pageMargins || {top: 0.3, bottom: 0.3, inner: 0.8, outer: 0.5}), inner: parseFloat(e.target.value) || 0 } })} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <FieldLabel>Externo (Outer)</FieldLabel>
+            <StyledInput type="number" step="0.05" value={draftConfig.pageMargins?.outer ?? 0.5} onChange={(e) => setDraftConfig({ ...draftConfig, pageMargins: { ...(draftConfig.pageMargins || {top: 0.3, bottom: 0.3, inner: 0.8, outer: 0.5}), outer: parseFloat(e.target.value) || 0 } })} />
+          </div>
+        </FieldRow>
 
         <hr style={{ borderTop: '1px solid #eee', margin: '15px 0' }} />
         <FieldGroup>
@@ -508,18 +605,39 @@ export default function Sidebar({
           </div>
         </FieldRow>
 
-        {floatingElements.length > 0 && (
+        {allLayers.length > 0 && (
           <div style={{ marginTop: '16px' }}>
             <SectionTitle style={{ fontSize: '1rem', border: 'none', marginBottom: '8px' }}>Capas Activas</SectionTitle>
-            {floatingElements.map((el, i) => (
+            {allLayers.map((el) => (
               <div key={el.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px', border: '1px solid #eee', borderRadius: '4px', marginBottom: '4px', backgroundColor: '#fafafa' }}>
                 <span style={{ fontSize: '0.85rem', flex: 1 }}>
-                  {el.type === 'image' ? `📷 Imagen ${i + 1}` : `📝 Texto ${i + 1}`}
+                  {el.name}
                 </span>
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  <ActionButton style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => sendToBack(el.id)}>⬇️ Fondo</ActionButton>
-                  <ActionButton style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => bringToFront(el.id)}>⬆️ Frente</ActionButton>
-                  <DeleteButton style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => removeFloatingElement(el.id)}>X</DeleteButton>
+                 <div style={{ display: 'flex', gap: '4px' }}>
+                  {!el.isStructural && (
+                    <ActionButton 
+                      style={{ padding: '4px 8px', fontSize: '0.75rem', backgroundColor: el.isLocked ? '#ffeaa7' : '#f1f2f6', color: '#2f3542', width: 'auto', marginTop: 0 }} 
+                      onClick={() => toggleLockElement(el.id)}
+                    >
+                      {el.isLocked ? '🔒' : '🔓'}
+                    </ActionButton>
+                  )}
+                  {el.isStructural && (
+                    <ActionButton 
+                      style={{ padding: '4px 8px', fontSize: '0.75rem', backgroundColor: '#f1f2f6', color: '#b2bec3', width: 'auto', marginTop: 0, cursor: 'not-allowed' }} 
+                      disabled
+                      title="Las capas estructurales siempre están fijadas"
+                    >
+                      🔒
+                    </ActionButton>
+                  )}
+                  <ActionButton style={{ padding: '4px 8px', fontSize: '0.75rem', width: 'auto', marginTop: 0 }} onClick={() => sendToBack(el.id)}>⬇️</ActionButton>
+                  <ActionButton style={{ padding: '4px 8px', fontSize: '0.75rem', width: 'auto', marginTop: 0 }} onClick={() => bringToFront(el.id)}>⬆️</ActionButton>
+                  {!el.isStructural ? (
+                    <DeleteButton style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => removeFloatingElement(el.id)}>X</DeleteButton>
+                  ) : (
+                    <DeleteButton style={{ padding: '4px 8px', fontSize: '0.75rem', visibility: 'hidden' }}>X</DeleteButton>
+                  )}
                 </div>
               </div>
             ))}
@@ -594,14 +712,7 @@ export default function Sidebar({
         </CheckboxLabel>
       </Accordion>
 
-      <div style={{ position: 'sticky', bottom: 0, backgroundColor: '#fff', paddingTop: '15px', paddingBottom: '15px', borderTop: '1px solid #eee', zIndex: 100, marginTop: '20px' }}>
-        <ActionButton $primary onClick={onGenerate}>
-          Aplicar Cambios
-        </ActionButton>
-        <ActionButton style={{ backgroundColor: '#2f3542', marginTop: '10px' }} onClick={() => window.print()}>
-          Exportar a PDF (Ctrl + P)
-        </ActionButton>
-      </div>
+      
 
     </ControlPanelContainer>
   );
