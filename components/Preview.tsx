@@ -193,7 +193,7 @@ export default function Preview({
             1. Carga tu CSV <br />
             2. Ajusta los parámetros
             <br />
-            3. Haz clic en "Generar"
+            3. Haz clic en &quot;Generar&quot;
           </p>
         </div>
       </PreviewCanvasContainer>
@@ -303,23 +303,23 @@ export default function Preview({
                       )
                     </div>
                     <MiniGrid
-                      $cols={puzzle.grid[0]?.length || appliedConfig.gridCols}
+                      $cols={puzzle.grid?.[0]?.length || appliedConfig.gridCols}
                       $rows={puzzle.grid?.length || appliedConfig.gridRows}
                       $showBorder={appliedConfig.gridSettings.outerLineWidth > 0}
                     >
-                      {puzzle.grid.map((row, rIdx) =>
+                      {(puzzle.grid || []).map((row, rIdx) =>
                         row.map((letter, cIdx) => (
                           <MiniCell
                             key={`mini-${rIdx}-${cIdx}`}
-                            $cols={puzzle.grid[0]?.length || appliedConfig.gridCols}
-                            $isAnswer={puzzle.solutionMask[rIdx][cIdx]}
+                            $cols={puzzle.grid?.[0]?.length || appliedConfig.gridCols}
+                            $isAnswer={puzzle.solutionMask?.[rIdx]?.[cIdx]}
                             $showLines={appliedConfig.gridSettings.innerLineWidth > 0}
                           >
                             {letter}
                           </MiniCell>
                         )),
                       )}
-                      {renderSolutionOverlays(puzzle, puzzle.grid[0]?.length || appliedConfig.gridCols, puzzle.grid?.length || appliedConfig.gridRows)}
+                      {renderSolutionOverlays(puzzle, puzzle.grid?.[0]?.length || appliedConfig.gridCols, puzzle.grid?.length || appliedConfig.gridRows)}
                     </MiniGrid>
                   </SingleSolutionBlock>
                 ))}

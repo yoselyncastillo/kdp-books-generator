@@ -1,317 +1,146 @@
 'use client';
 
-import Preview from '@/components/Preview';
-import Sidebar from '@/components/Sidebar';
-import CsvEditor from '@/components/CsvEditor';
-import { LayoutWrapper } from '@/styles/components';
-import { KdpPrintStyles } from '@/styles/global';
-import { BookConfig, RawPuzzleData, Puzzle } from '@/types';
-import { parseCsvFile } from '@/utils/csvHelper';
-import { buildMatrix } from '@/utils/wordSearch';
-import React, { useState } from 'react';
-import { Lora, Playfair_Display, Merriweather } from 'next/font/google';
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { api } from '@/services/api';
+import { Book } from '@/types';
 
-import { Montserrat, Open_Sans } from 'next/font/google';
+export default function DashboardPage() {
+  const [books, setBooks] = useState<Book[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
-const fontLora = Lora({ subsets: ['latin'], variable: '--font-lora' });
-const fontPlayfair = Playfair_Display({ subsets: ['latin'], variable: '--font-playfair' });
-const fontMerriweather = Merriweather({ subsets: ['latin'], variable: '--font-merriweather' });
-const fontMontserrat = Montserrat({ subsets: ['latin'], variable: '--font-montserrat' });
-const fontOpenSans = Open_Sans({ subsets: ['latin'], variable: '--font-opensans' });
+  useEffect(() => {
+    fetchBooks();
+  }, []);
 
-import { DEFAULT_LAYOUT_CONFIGS } from '@/utils/layoutConfigs';
+  const fetchBooks = async () => {
+    setIsLoading(true);
+    const data = await api.getBooks();
+    setBooks(data);
+    setIsLoading(false);
+  };
 
-const DEFAULT_CONFIG: BookConfig = {
-  maxPages: 100,
-  startingPage: 3,
-  solutionsDensity: 4,
-  allowDiagonals: true,
-  allowReverse: false,
-  backgrounds: [],
-  bgOpacity: 50,
-  pageMargins: { top: 0.3, bottom: 0.3, inner: 0.8, outer: 0.5 },
-  layerZIndices: {
-    title: 1,
-    verse: 1,
-    grid: 1,
-    words: 1,
-  },
-  ...(DEFAULT_LAYOUT_CONFIGS[1] as any),
-};
+  const handleCreateBook = async () => {
+    const title = prompt('Ingresa el título del nuevo proyecto:');
+    if (!title) return;
+    
+    const newBook = await api.createBook(title);
+    router.push(`/editor/${newBook.id}`);
+  };
 
-export default function KdpGeneratorApp() {
-  const [rawCsvData, setRawCsvData] = useState<RawPuzzleData[]>([]);
-  const [dataset, setDataset] = useState<Puzzle[]>([]);
-  const [draftConfig, setDraftConfig] = useState<BookConfig>(DEFAULT_CONFIG);
+  const handleEditBook = (id: string) => {
+    router.push(`/editor/${id}`);
+  };
 
-  const [zoomLevel, setZoomLevel] = useState<number>(0.8);
-  const [showPreviewSolutions, setShowPreviewSolutions] =
-    useState<boolean>(false);
-
-  const [isTestingManual, setIsTestingManual] = useState<boolean>(false);
-  const [manualData, setManualData] = useState<RawPuzzleData>({
-    title: 'The Good Shepherd',
-    scripture: 'The Lord is my shepherd, I lack nothing. He makes me lie down in green pastures, he leads me beside quiet waters, he refreshes my soul. Psalm 23:1-2',
-    words: ['LORD', 'SHEPHERD', 'NOTHING', 'PASTURES', 'QUIET', 'WATERS', 'REFRESHES', 'SOUL', 'GUIDES', 'PATHS', 'VALLEY', 'FEAR', 'EVIL', 'COMFORT', 'GREEN', 'STAFF', 'ANXIOUS', 'SITUATION', 'PRAYER', 'PETITION', 'REQUESTS', 'GUARD', 'HEARTS', 'MINDS', 'NOBLE'],
-    reflectionText: 'In a world that constantly pushes us to hurry, achieve, and accumulate more, Psalm 23 offers a radical shift in perspective. When we recognize God as our shepherd, the focus moves from what we lack to the peace of knowing we are deeply cared for. True abundance isn\'t about having everything; it is about trusting the One who provides exactly what we need for today. The imagery of "green pastures" and "quiet waters" is not just a promise of future peace, but an active invitation to slow down right now. Often, we try to push through exhaustion, but the verse says He makes us lie down. It is a gentle reminder that rest is not a luxury, but a divine necessity. Before we can climb the next mountain or face the next challenge, we are called to simply stop, breathe, and let our souls be restored.',
-    footerPrayer: 'Lord, thank You for being my faithful shepherd who provides for all my needs. Teach me to pause amidst the busyness of life, trusting in Your care and embracing the rest You offer beside quiet waters. Please restore my soul today and guide my steps in Your perfect peace. Amen.',
-    floatingElements: [],
-  });
-  const [manualMatrix, setManualMatrix] = useState<{grid: any, solutionMask: any, placedWords: any} | null>(null);
-
-  const manualDataset = React.useMemo<Puzzle[]>(() => {
-    if (!manualMatrix) return [];
-    return [{ id: 9999, ...manualData, ...manualMatrix }];
-  }, [manualData, manualMatrix]);
-
-  const [activePageIndex, setActivePageIndex] = useState<number>(0);
-  const [showFullTable, setShowFullTable] = useState<boolean>(false);
-
-  React.useEffect(() => {
-    if (!isTestingManual) return;
-    try {
-      const { grid, solutionMask, placedWords } = buildMatrix(
-        manualData.words,
-        draftConfig.gridRows,
-        draftConfig.gridCols,
-        draftConfig.allowDiagonals,
-        draftConfig.allowReverse,
-      );
-      setManualMatrix({ grid, solutionMask, placedWords });
-    } catch (e) {
-      console.warn("No se pudo generar el puzzle manual", e);
-    }
-  }, [
-    manualData.words,
-    draftConfig.gridRows,
-    draftConfig.gridCols,
-    draftConfig.allowDiagonals,
-    draftConfig.allowReverse,
-    isTestingManual
-  ]);
-
-  // Auto-regenerate global dataset when structural config changes
-  const prevStructuralConfig = React.useRef({
-    rows: draftConfig.gridRows,
-    cols: draftConfig.gridCols,
-    diagonals: draftConfig.allowDiagonals,
-    reverse: draftConfig.allowReverse,
-  });
-
-  React.useEffect(() => {
-    if (
-      prevStructuralConfig.current.rows === draftConfig.gridRows &&
-      prevStructuralConfig.current.cols === draftConfig.gridCols &&
-      prevStructuralConfig.current.diagonals === draftConfig.allowDiagonals &&
-      prevStructuralConfig.current.reverse === draftConfig.allowReverse
-    ) {
-      return;
-    }
-
-    prevStructuralConfig.current = {
-      rows: draftConfig.gridRows,
-      cols: draftConfig.gridCols,
-      diagonals: draftConfig.allowDiagonals,
-      reverse: draftConfig.allowReverse,
-    };
-
-    if (isTestingManual || rawCsvData.length === 0) return;
-
-    const timer = setTimeout(() => {
-      const generatedPuzzles: Puzzle[] = rawCsvData.map((item, idx) => {
-        const { grid, solutionMask, placedWords } = buildMatrix(
-          item.words,
-          draftConfig.gridRows,
-          draftConfig.gridCols,
-          draftConfig.allowDiagonals,
-          draftConfig.allowReverse,
-        );
-        return { id: idx + 1, ...item, grid, solutionMask, placedWords };
-      });
-      setDataset(generatedPuzzles);
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [
-    draftConfig.gridRows,
-    draftConfig.gridCols,
-    draftConfig.allowDiagonals,
-    draftConfig.allowReverse,
-    isTestingManual,
-    rawCsvData
-  ]);
-
-  const handleUpdateCsvRow = (index: number, updatedRow: RawPuzzleData) => {
-    const newRaw = [...rawCsvData];
-    newRaw[index] = updatedRow;
-    setRawCsvData(newRaw);
-
-    // Regenerar el puzzle específico en el dataset
-    const newDataset = [...dataset];
-    const targetPuzzleIndex = newDataset.findIndex(p => p.id === index + 1);
-
-    if (targetPuzzleIndex !== -1) {
-      try {
-        const { grid, solutionMask, placedWords } = buildMatrix(
-          updatedRow.words,
-          draftConfig.gridRows,
-          draftConfig.gridCols,
-          draftConfig.allowDiagonals,
-          draftConfig.allowReverse,
-        );
-        newDataset[targetPuzzleIndex] = { id: index + 1, ...updatedRow, grid, solutionMask, placedWords };
-        setDataset(newDataset);
-      } catch (e) {
-        console.warn("No se pudo regenerar el puzzle en caliente", e);
-      }
+  const handleDeleteBook = async (id: string) => {
+    if (confirm('¿Estás seguro de que quieres borrar este proyecto?')) {
+      await api.deleteBook(id);
+      fetchBooks();
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      try {
-        const parsed = await parseCsvFile(file);
-        if (parsed.length === 0) {
-          alert('El archivo se subió, pero no se encontraron datos válidos. Revisa que las columnas estén separadas por punto y coma (;) y que haya al menos 3 columnas por fila (Title;Scripture;Words).');
-        } else {
-          const generatedPuzzles: Puzzle[] = parsed.map((item, idx) => {
-            const { grid, solutionMask, placedWords } = buildMatrix(
-              item.words,
-              draftConfig.gridRows,
-              draftConfig.gridCols,
-              draftConfig.allowDiagonals,
-              draftConfig.allowReverse,
-            );
-            return { id: idx + 1, ...item, grid, solutionMask, placedWords };
-          });
-          setDataset(generatedPuzzles);
-          alert(`¡Archivo cargado con éxito! Se detectaron ${parsed.length} juegos y han sido generados.`);
-        }
-        setRawCsvData(parsed);
-      } catch (error) {
-        alert('Error grave procesando CSV: ' + error);
-      }
+  const handleDuplicateBook = async (id: string) => {
+    const duplicated = await api.duplicateBook(id);
+    fetchBooks();
+    alert(`Proyecto duplicado con éxito: ${duplicated.title}`);
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'published':
+        return <span className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full font-medium">Publicado</span>;
+      case 'ready_for_kdp':
+        return <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full font-medium">Listo para KDP</span>;
+      case 'draft':
+      default:
+        return <span className="px-3 py-1 bg-gray-100 text-gray-800 text-sm rounded-full font-medium">Borrador</span>;
     }
   };
 
-  const regenerateAllPuzzles = () => {
-    if (rawCsvData.length === 0) {
-      alert('No hay datos para regenerar.');
-      return;
-    }
-    const generatedPuzzles: Puzzle[] = rawCsvData.map((item, idx) => {
-      const { grid, solutionMask, placedWords } = buildMatrix(
-        item.words,
-        draftConfig.gridRows,
-        draftConfig.gridCols,
-        draftConfig.allowDiagonals,
-        draftConfig.allowReverse,
-      );
-      return { id: idx + 1, ...item, grid, solutionMask, placedWords };
-    });
-    setDataset(generatedPuzzles);
-  };
-
-  const regeneratePuzzle = (index: number) => {
-    if (index < 0 || index >= rawCsvData.length) return;
-    const item = rawCsvData[index];
-    const { grid, solutionMask, placedWords } = buildMatrix(
-      item.words,
-      draftConfig.gridRows,
-      draftConfig.gridCols,
-      draftConfig.allowDiagonals,
-      draftConfig.allowReverse,
-    );
-    const newDataset = [...dataset];
-    const targetPuzzleIndex = newDataset.findIndex(p => p.id === index + 1);
-    if (targetPuzzleIndex !== -1) {
-      newDataset[targetPuzzleIndex] = { id: index + 1, ...item, grid, solutionMask, placedWords };
-      setDataset(newDataset);
-    }
-  };
-
-  const handleUpdatePuzzleFloatingElements = (puzzleId: number, newElements: import('../types').CanvasElement[]) => {
-    if (isTestingManual) {
-      setManualData(prev => ({ ...prev, floatingElements: newElements }));
-    } else {
-      setRawCsvData(prev => prev.map((row, idx) => (idx + 1 === puzzleId) ? { ...row, floatingElements: newElements } : row));
-      setDataset(prev => prev.map(p => p.id === puzzleId ? { ...p, floatingElements: newElements } : p));
-    }
-  };
+  if (isLoading) {
+    return <div className="min-h-screen flex items-center justify-center bg-gray-50">Cargando dashboard...</div>;
+  }
 
   return (
-    <div
-      className={`${fontLora.variable} ${fontPlayfair.variable} ${fontMerriweather.variable} ${fontMontserrat.variable} ${fontOpenSans.variable}`}
-    >
-      <LayoutWrapper>
-        <KdpPrintStyles />
-        <Sidebar
-          draftConfig={draftConfig}
-          setDraftConfig={setDraftConfig}
-          rawCsvDataLength={rawCsvData.length}
-          onFileUpload={handleFileUpload}
-          onRegenerateAll={regenerateAllPuzzles}
-          onRegeneratePuzzle={regeneratePuzzle}
-          zoomLevel={zoomLevel}
-          setZoomLevel={setZoomLevel}
-          showPreviewSolutions={showPreviewSolutions}
-          setShowPreviewSolutions={setShowPreviewSolutions}
-          isTestingManual={isTestingManual}
-          setIsTestingManual={setIsTestingManual}
-          manualData={manualData}
-          setManualData={setManualData}
-          activePageIndex={activePageIndex}
-          setActivePageIndex={setActivePageIndex}
-          rawCsvData={rawCsvData}
-          onUpdateCsvRow={handleUpdateCsvRow}
-          setShowFullTable={setShowFullTable}
-        />
-        <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-          <Preview
-            dataset={isTestingManual ? manualDataset : dataset}
-            appliedConfig={draftConfig}
-            zoomLevel={zoomLevel}
-            showPreviewSolutions={showPreviewSolutions}
-            onUpdateFloatingElements={handleUpdatePuzzleFloatingElements}
-          />
+    <div className="min-h-screen bg-gray-50 py-10 px-6">
+      <div className="max-w-7xl mx-auto">
+        
+        {/* Header */}
+        <div className="flex justify-between items-center mb-10">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Mis Proyectos KDP</h1>
+            <p className="text-gray-500 mt-2">Gestiona tus libros de sopas de letras</p>
+          </div>
+          <button 
+            onClick={handleCreateBook}
+            className="bg-black hover:bg-gray-800 text-white px-6 py-3 rounded-lg font-medium shadow-md transition-all flex items-center gap-2"
+          >
+            <span>+</span> Nuevo Proyecto
+          </button>
         </div>
-      </LayoutWrapper>
-      {/* Botón flotante para imprimir */}
-      <button
-        onClick={() => window.print()}
-        style={{
-          position: 'fixed',
-          bottom: '20px',
-          right: '20px',
-          width: '60px',
-          height: '60px',
-          borderRadius: '50%',
-          backgroundColor: '#000',
-          color: 'white',
-          border: 'none',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-          cursor: 'pointer',
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '24px'
-        }}
-        title="Imprimir a PDF"
-        className="no-print"
-      >
-        🖨️
-      </button>
 
-
-      {showFullTable && (
-        <CsvEditor
-          rawCsvData={rawCsvData}
-          onUpdateRow={handleUpdateCsvRow}
-          onClose={() => setShowFullTable(false)}
-        />
-      )}
+        {/* Grid de proyectos */}
+        {books.length === 0 ? (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-16 text-center">
+            <h2 className="text-xl font-medium text-gray-700 mb-2">No tienes proyectos aún</h2>
+            <p className="text-gray-500 mb-6">Crea tu primer libro para empezar a generar contenido para KDP.</p>
+            <button 
+              onClick={handleCreateBook}
+              className="bg-black hover:bg-gray-800 text-white px-6 py-2 rounded-md font-medium transition-all"
+            >
+              Crear mi primer proyecto
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {books.map(book => (
+              <div key={book.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-all flex flex-col h-full">
+                <div className="p-6 flex-grow">
+                  <div className="flex justify-between items-start mb-4">
+                    {getStatusBadge(book.status)}
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2 line-clamp-2">{book.title}</h3>
+                  <div className="text-sm text-gray-500 mb-4">
+                    <p>Creado: {new Date(book.createdAt).toLocaleDateString()}</p>
+                    <p>Actualizado: {new Date(book.updatedAt).toLocaleDateString()}</p>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 px-6 py-4 border-t border-gray-100 flex justify-between items-center gap-2">
+                  <button 
+                    onClick={() => router.push(`/view/${book.id}`)}
+                    className="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 w-10 h-10 rounded-md flex items-center justify-center transition-colors cursor-pointer"
+                    title="Solo ver"
+                  >
+                    👁️
+                  </button>
+                  <button 
+                    onClick={() => handleEditBook(book.id)}
+                    className="text-indigo-600 hover:text-indigo-800 font-medium text-sm flex-grow bg-indigo-50 hover:bg-indigo-100 py-2 rounded-md text-center transition-colors cursor-pointer"
+                  >
+                    ✏️ Editar
+                  </button>
+                  <button 
+                    onClick={() => handleDuplicateBook(book.id)}
+                    className="text-gray-600 hover:text-gray-900 bg-gray-200 hover:bg-gray-300 w-10 h-10 rounded-md flex items-center justify-center transition-colors cursor-pointer"
+                    title="Duplicar"
+                  >
+                    📄
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteBook(book.id)}
+                    className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 w-10 h-10 rounded-md flex items-center justify-center transition-colors cursor-pointer"
+                    title="Borrar"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

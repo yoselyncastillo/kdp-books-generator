@@ -111,3 +111,15 @@ export interface BookConfig {
   gridSettings: GridSettings;
   notesSettings: NotesSettings;
 }
+
+export type BookStatus = 'draft' | 'ready_for_kdp' | 'published';
+
+export interface Book {
+  id: string;
+  title: string;
+  status: BookStatus;
+  config: BookConfig;
+  puzzleData: any[]; // Se usará para guardar la data completa generada con el grid
+  createdAt: string;
+  updatedAt: string;
+}

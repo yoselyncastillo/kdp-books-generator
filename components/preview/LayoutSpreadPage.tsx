@@ -66,15 +66,15 @@ export default function LayoutSpreadPage({
         ...(marginZero ? { margin: 0 } : {})
       }}
     >
-      {puzzle.grid && puzzle.grid.map((row, rIdx) =>
+      {(puzzle.grid || []).map((row, rIdx) =>
         row.map((letter, cIdx) => (
           <SopaCell
             key={`${rIdx}-${cIdx}`}
-            $cols={puzzle.grid[0]?.length || appliedConfig.gridCols}
+            $cols={puzzle.grid?.[0]?.length || appliedConfig.gridCols}
             $innerLineWidth={appliedConfig.gridSettings.innerLineWidth}
             $borderColor={appliedConfig.gridSettings.borderColor}
             $cellPadding={appliedConfig.gridSettings.cellPadding}
-            $isAnswer={puzzle.solutionMask[rIdx][cIdx]}
+            $isAnswer={puzzle.solutionMask?.[rIdx]?.[cIdx]}
             $showPreview={showPreviewSolutions}
             $fontSize={appliedConfig.gridTypography.fontSize}
             $fontFamily={appliedConfig.gridTypography.fontFamily}
@@ -86,7 +86,7 @@ export default function LayoutSpreadPage({
           </SopaCell>
         )),
       )}
-      {showPreviewSolutions && renderSolutionOverlays(puzzle, puzzle.grid[0]?.length || appliedConfig.gridCols, puzzle.grid?.length || appliedConfig.gridRows)}
+      {showPreviewSolutions && renderSolutionOverlays(puzzle, puzzle.grid?.[0]?.length || appliedConfig.gridCols, puzzle.grid?.length || appliedConfig.gridRows)}
     </SopaGrid>
   );
 
